@@ -1,0 +1,476 @@
+###############################################
+# Codeforces Round 1069 (Div. 2)
+# Standing: 189 / 9206
+###############################################
+
+===============================================
+Problem A — Little Fairy’s Painting
+===============================================
+Topics: implementation, sets, uniqueness
+
+Solution:
+#include <bits/stdc++.h>
+using namespace std;
+
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int t;
+    cin >> t;
+
+    while (t--) {
+        int n;
+        cin >> n;
+        vector<int> a(n);
+        for (auto &x : a) cin >> x;
+        sort(a.begin(), a.end());
+        a.erase(unique(a.begin(), a.end()), a.end());
+        set<int> uniq(a.begin(), a.end());
+        int D = uniq.size();
+        int ans = D;
+        while (!uniq.count(ans))
+            ans++;
+
+        cout << ans << "\n";
+    }
+
+    return 0;
+}
+
+Logic:
+- Read array, sort it, remove duplicates → get distinct values.
+- Convert to set for fast membership checking.
+- Let D = number of distinct elements.
+- Starting from ans = D, keep increasing ans until ans exists in the set.
+- Print the smallest ans >= D that also appears in the array.
+
+
+===============================================
+Problem B — XOR Array
+===============================================
+Topics: bitwise XOR, constructive, prefix array trick
+
+Solution:
+#include <bits/stdc++.h>
+using namespace std;
+
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int t;
+    cin >> t;
+    while (t--) {
+        int n, l, r;
+        cin >> n >> l >> r;
+
+        const int C = 1 << 28; 
+
+        vector<int> p(n + 1);
+        for (int i = 0; i <= n; ++i) p[i] = i; 
+
+        p[l - 1] = C;
+        p[r]     = C; 
+        vector<int> a(n);
+        for (int i = 1; i <= n; ++i) {
+            a[i - 1] = p[i] ^ p[i - 1];
+        }
+
+        for (int i = 0; i < n; ++i) {
+            cout << a[i] << (i + 1 == n ? '\n' : ' ');
+        }
+    }
+    return 0;
+}
+
+Logic:
+- Build an auxiliary prefix array p[] where p[i] = i initially.
+- Force p[l-1] and p[r] to a large constant C so XOR differences in that segment become large/unique.
+- Construct the output array a[i] = p[i] ^ p[i-1].
+- This creates a valid array matching the constraints for the given (l, r) segment.
+
+
+===============================================
+Problem C — Needle in a Haystack
+===============================================
+Topics: strings, frequency counting, greedy construction, ordering logic
+
+Solution:
+#include <bits/stdc++.h>
+using namespace std;
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+    int T;
+    cin >> T;
+    while (T--) {
+        string s, t;
+        cin >> s >> t;
+        vector<int> freqS(26,0), freqT(26,0);
+        for (char c : s) freqS[c-'a']++;
+        for (char c : t) freqT[c-'a']++;
+        bool ok = true;
+        for (int i=0;i<26;i++)
+            if (freqS[i] > freqT[i]) ok = false;
+        if (!ok) {
+            cout << "Impossible\n";
+            continue;
+        }
+        vector<int> leftover(26);
+        for (int i=0;i<26;i++)
+            leftover[i] = freqT[i] - freqS[i];
+        int n = s.size();
+        vector<int> rank(n+1);
+        rank[n] = -1; 
+
+        for (int i = n-1; i >= 0; i--) {
+            if (i == n-1)
+                rank[i] = 0;
+            else if (s[i] < s[i+1])
+                rank[i] = -1000000000 + i;
+            else if (s[i] > s[i+1])
+                rank[i] = +1000000000 - i;
+            else
+                rank[i] = rank[i+1];
+        }
+        string result;
+        int i = 0;
+        while (i < n) {
+            for (char c = 'a'; c < s[i]; c++) {
+                while (leftover[c-'a'] > 0) {
+                    result.push_back(c);
+                    leftover[c-'a']--;
+                }
+            }
+            char c = s[i];
+            while (leftover[c-'a'] > 0) {
+                if (rank[i] < rank[i+1]) {
+                    result.push_back(c);
+                    leftover[c-'a']--;
+                } else break;
+            }
+            result.push_back(s[i]);
+            i++;
+        }
+        for (char c = 'a'; c <= 'z'; c++)
+            while (leftover[c-'a']--)
+                result.push_back(c);
+        cout << result << "\n";
+    }
+    return 0;
+}
+
+Logic:
+- Count frequencies of s and t; if t cannot cover s, print Impossible.
+- Compute leftover characters (freqT - freqS).
+- Build a rank[] array encoding how s compares lexicographically from each position.
+- Construct result by:
+  - placing leftover letters < s[i],
+  - sometimes placing leftover equal letters if lexicographically beneficial,
+  - then placing s[i].
+- Append all remaining leftover letters at the end.
+
+
+===============================================
+Problem D — Wishing Cards (Partial: 11 tests passed, will push corrected one soon)
+===============================================
+Topics: DP over (items × used × max), combinatorics, knapsack-like transitions
+
+Solution:
+#include <bits/stdc++.h>
+using namespace std;
+
+static long long dp[370][370];
+static long long ndp[370][370];
+
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int t;
+    cin >> t;
+    while (t--) {
+        int n, k;
+        cin >> n >> k;
+        vector<int> a(n);
+        for (int &x : a) cin >> x;
+
+        for (int i = 0; i <= k; i++)
+            for (int j = 0; j <= k; j++)
+                dp[i][j] = -1e18;
+
+        dp[0][0] = 0;
+
+        for (int idx = 0; idx < n; idx++) {
+            int cap = a[idx];
+
+            for (int i = 0; i <= k; i++)
+                for (int j = 0; j <= k; j++)
+                    ndp[i][j] = -1e18;
+
+            for (int used = 0; used <= k; used++) {
+                for (int M = 0; M <= k; M++) {
+                    long long cur = dp[used][M];
+                    if (cur < 0) continue;
+                    for (int b = 0; b <= cap; b++) {
+                        if (used + b > k) break;
+                        int nM = max(M, b);
+                        ndp[used + b][nM] = max(ndp[used + b][nM], cur + nM);
+                    }
+                }
+            }
+            for (int i = 0; i <= k; i++)
+                for (int j = 0; j <= k; j++)
+                    dp[i][j] = ndp[i][j];
+        }
+
+        long long ans = 0;
+        for (int used = 0; used <= k; used++)
+            for (int M = 0; M <= k; M++)
+                ans = max(ans, dp[used][M]);
+        cout << ans << "\n";
+    }
+    return 0;
+}
+
+Logic:
+- Classic 2D DP: dp[used][M] = best score using "used" total items and max-taken = M.
+- For each card group with capacity cap:
+  - Try all b from 0..cap (how many to take).
+  - Update next DP state.
+- Score contribution each step is the running maximum M.
+- Partial because complexity too high for constraints; optimized version needed.
+
+
+===============================================
+Problem E1 — Beautiful Patterns (Easy)
+===============================================
+Topics: math, modular arithmetic, center-based counting, probability terms
+
+Solution:
+#include <bits/stdc++.h>
+using namespace std;
+
+long long modPow(long long a, long long b, long long mod) {
+    long long r = 1;
+    while (b) {
+        if (b & 1) r = (r * a) % mod;
+        a = (a * a) % mod;
+        b >>= 1;
+    }
+    return r;
+}
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int T;
+    cin >> T;
+
+    while (T--) {
+        int n;
+        long long m, p;
+        cin >> n >> m >> p;
+        vector<long long> P(n + 1);
+        long long inv_m = modPow(m, p - 2, p);
+        P[0] = 1;
+        for (int k = 1; k <= n; ++k) {
+            P[k] = (P[k - 1] * inv_m) % p;
+        }
+        vector<pair<int,int>> centers;
+        centers.reserve(2 * n);
+        for (int c = 1; c <= n; ++c) {
+            int R = min(c - 1, n - c);
+            centers.emplace_back(0, R);
+        }
+        for (int c = 1; c < n; ++c) {
+            int R = min(c, n - c);
+            centers.emplace_back(1, R);
+        }
+        int C = (int)centers.size();
+        vector<long long> A(C);
+        long long S1 = 0;
+        long long S2_same = 0;
+        for (int i = 0; i < C; ++i) {
+            int kmin = centers[i].first;
+            int R = centers[i].second;
+
+            long long sumPk = 0;
+            if (R >= kmin) {
+                for (int k = kmin; k <= R; ++k) {
+                    sumPk += P[k];
+                    if (sumPk >= p) sumPk -= p;
+                }
+                for (int k = kmin + 1; k <= R; ++k) {
+                    long long contrib = (long long)(k - kmin) * P[k] % p;
+                    S2_same += contrib;
+                    if (S2_same >= p) S2_same -= p;
+                }
+            }
+            A[i] = sumPk;
+            S1 += sumPk;
+            if (S1 >= p) S1 -= p;
+        }
+
+        long long totalA = 0;
+        for (int i = 0; i < C; ++i) {
+            totalA += A[i];
+            if (totalA >= p) totalA -= p;
+        }
+
+        long long sumA_sq = 0;
+        for (int i = 0; i < C; ++i) {
+            sumA_sq = (sumA_sq + A[i] * A[i]) % p;
+        }
+
+        long long inv2 = modPow(2, p - 2, p);
+        long long S2_diff = ( (totalA * totalA - sumA_sq) % p + p ) % p;
+        S2_diff = S2_diff * inv2 % p;
+
+        long long S2 = (S2_same + S2_diff) % p;
+
+        long long ans = (S1 + 2LL * S2) % p;
+        cout << ans << "\n";
+    }
+
+    return 0;
+}
+
+Logic:
+- Precompute P[k] = m⁻ᵏ mod p.
+- Enumerate all centers for palindromic radii (odd/even).
+- For each center, sum contributions of valid radii.
+- Compute:
+  - S1 = total single-center contributions,
+  - S2_same = pair contributions from same center,
+  - S2_diff = pair contributions from different centers (via algebra).
+- Final answer = S1 + 2·S2 (mod p).
+
+
+===============================================
+Problem E2 — Beautiful Patterns (Hard)
+===============================================
+Topics: advanced math, radius counts, combinatorics, modular convolution-like structure
+
+Solution:
+#include <bits/stdc++.h>
+using namespace std;
+
+long long modPow(long long a, long long b, long long mod) {
+    long long r = 1;
+    while (b) {
+        if (b & 1) r = r * a % mod;
+        a = a * a % mod;
+        b >>= 1;
+    }
+    return r;
+}
+
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int T;
+    cin >> T;
+
+    while (T--) {
+        int n;
+        long long m, p;
+        cin >> n >> m >> p;
+
+        vector<long long> P(n + 1);
+        long long invm = modPow(m, p - 2, p); 
+        P[0] = 1;
+        for (int k = 1; k <= n; ++k) {
+            P[k] = P[k - 1] * invm % p;
+        }
+
+        vector<long long> Aodd(n + 1), Aeven(n + 1);
+        for (int k = 0; k <= n; ++k) {
+            long long v = n - 2LL * k;
+            Aodd[k] = (v > 0 ? v : 0);
+            if (k == 0) {
+                Aeven[0] = 0;  
+            } else {
+                long long v2 = n + 1LL - 2LL * k;
+                Aeven[k] = (v2 > 0 ? v2 : 0);
+            }
+        }
+
+        long long S1 = 0;
+        for (int k = 0; k <= n; ++k) {
+            long long coef = Aodd[k] + Aeven[k];
+            S1 = (S1 + coef % p * P[k]) % p;
+        }
+
+        long long S2_same = 0;
+        for (int t = 1; t <= n; ++t) {
+            if (!Aodd[t]) continue;
+            long long term = (long long)t * (Aodd[t] % p) % p;
+            term = term * P[t] % p;
+            S2_same = (S2_same + term) % p;
+        }
+        for (int t = 2; t <= n; ++t) {
+            if (!Aeven[t]) continue;
+            long long term = (long long)(t - 1) * (Aeven[t] % p) % p;
+            term = term * P[t] % p;
+            S2_same = (S2_same + term) % p;
+        }
+
+        long long sumA = S1;
+
+        vector<long long> Q(n + 1);
+        Q[0] = P[0];
+        for (int t = 1; t <= n; ++t) {
+            Q[t] = (Q[t - 1] + P[t]) % p;
+        }
+
+        long long sumA_sq_odd = 0;
+        for (int t = 0; t <= n; ++t) {
+            if (!Aodd[t]) continue;
+            long long pref = (t >= 1 ? Q[t - 1] : 0);
+            long long val = (P[t] * P[t] % p + 2LL * P[t] % p * pref) % p;
+            sumA_sq_odd = (sumA_sq_odd + (Aodd[t] % p) * val) % p;
+        }
+        long long sumA_sq_even = 0;
+        for (int t = 1; t <= n; ++t) {
+            if (!Aeven[t]) continue;
+            long long pref = 0;
+            if (t >= 2) {
+                pref = (Q[t - 1] - P[0]) % p;
+                if (pref < 0) pref += p;
+            }
+            long long val = (P[t] * P[t] % p + 2LL * P[t] % p * pref) % p;
+            sumA_sq_even = (sumA_sq_even + (Aeven[t] % p) * val) % p;
+        }
+
+        long long sumA_sq = (sumA_sq_odd + sumA_sq_even) % p;
+        long long inv2 = modPow(2, p - 2, p);
+        long long S2_diff = ( (sumA * sumA - sumA_sq) % p + p ) % p;
+        S2_diff = S2_diff * inv2 % p;
+
+        long long ans = (S1 + 2LL * ((S2_same + S2_diff) % p)) % p;
+        cout << ans << "\n";
+    }
+
+    return 0;
+}
+
+Logic:
+- Precompute P[k] = m⁻ᵏ mod p.
+- Compute Aodd[k] and Aeven[k] counting how many centers support radius k.
+- S1 accumulates single-center contributions.
+- S2_same handles pairs from same structure.
+- S2_diff handles cross-pairs using algebra + prefix sums Q.
+- Combine to produce final sum modulo p.
+
+
+===============================================
+Problem F — Secret Message (couldn't solve, will upsolve and push soon)
+===============================================
+
+
+###############################################
+# End of Contest Notes
+###############################################
