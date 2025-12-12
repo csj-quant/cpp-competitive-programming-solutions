@@ -217,7 +217,31 @@ int main() {
 
     int T = 1;
     // cin >> T;
-    while (T--) solve();
+
+    int64_t n, k; cin >> n >> k;
+    if (n%2 == 0 && k <= n/2) cout << 2*k-1;
+    else if (n%2 == 0 && k > n/2) cout << 2*k - n;
+    else if (n%2 != 0 && k <= (n+1)/2) cout << 2*k - 1;
+    else if (n%2 != 0 && k > (n+1)/2) cout << 2*k - n - 1;
 
     return 0;
 }
+
+/*
+ * 1 2 3 4  ... N
+ *
+ * if(N==even)
+ * {
+ *      1 3 5 .. N-1  2      4      6  ..  N
+ *      1 2 3 .. N/2  N/2+1  N/2+2  ...
+ *
+ *      IF(K <= N/2) cout << 2k-1
+ *      else if(k > N/2) cout << 2k-  N
+ * }
+ * else {
+ *      1 3 5 7 ... N           2           4         6      ....   N-1
+ *      1 2 3 4 ... (N+1)/2     (n+1)/2+1
+ *      IF(k <= (N+1)/2) COUT << 2k-1
+ *      else cout << (k - (n+1)/2)*2 = 2k -n-1
+ * }
+*/
