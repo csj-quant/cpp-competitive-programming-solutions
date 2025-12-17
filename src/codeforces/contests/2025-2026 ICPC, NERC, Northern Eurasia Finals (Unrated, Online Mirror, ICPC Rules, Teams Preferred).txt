@@ -1,0 +1,966 @@
+Soln for A alphabet city:
+
+#include <bits/stdc++.h>
+using namespace std;
+
+/* =========================
+   Type aliases
+   ========================= */
+using ll  = long long;
+using ull = unsigned long long;
+using ld  = long double;
+
+using pii = pair<int,int>;
+using pll = pair<ll,ll>;
+using vi  = vector<int>;
+using vll = vector<ll>;
+
+/* =========================
+   Fast I/O
+   ========================= */
+#define FAST_IO ios::sync_with_stdio(false); cin.tie(nullptr);
+
+/* =========================
+   Constants
+   ========================= */
+constexpr ll INFLL = (ll)1e18;
+constexpr int INF  = (int)1e9;
+constexpr int MOD  = 1000000007;
+
+/* =========================
+   Debug utilities
+   ========================= */
+// #define DEBUG
+#ifdef DEBUG
+#define dbg(x) cerr << #x << " = " << x << "\n"
+#else
+#define dbg(x)
+#endif
+
+/* =========================
+   Custom Hash (anti-hack)
+   ========================= */
+struct custom_hash {
+    static ull splitmix64(ull x) {
+        x += 0x9e3779b97f4a7c15;
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111eb;
+        return x ^ (x >> 31);
+    }
+    size_t operator()(ull x) const noexcept {
+        static const ull FIXED_RANDOM =
+            chrono::steady_clock::now().time_since_epoch().count();
+        return splitmix64(x + FIXED_RANDOM);
+    }
+};
+
+/* =========================
+   Disjoint Set Union (DSU)
+   ========================= */
+struct DSU {
+    vector<int> p, sz;
+    explicit DSU(int n) : p(n), sz(n,1) { iota(p.begin(), p.end(), 0); }
+    int find(int x) {
+        while (p[x] != x) { p[x] = p[p[x]]; x = p[x]; }
+        return x;
+    }
+    bool unite(int a, int b) {
+        a = find(a); b = find(b);
+        if (a == b) return false;
+        if (sz[a] < sz[b]) swap(a,b);
+        p[b] = a; sz[a] += sz[b];
+        return true;
+    }
+};
+
+/* =========================
+   Fenwick Tree (BIT)
+   ========================= */
+struct Fenwick {
+    int n;
+    vector<ll> bit;
+    explicit Fenwick(int n) : n(n), bit(n+1) {}
+    void add(int i, ll v) { for (++i; i <= n; i += i & -i) bit[i] += v; }
+    ll sum(int i) const { ll s = 0; for (++i; i > 0; i -= i & -i) s += bit[i]; return s; }
+    ll range(int l, int r) const { return sum(r) - (l ? sum(l-1) : 0); }
+};
+
+/* =========================
+   Segment Tree (Range Sum)
+   ========================= */
+struct SegTree {
+    int n;
+    vector<ll> t;
+    explicit SegTree(int n) : n(n), t(4*n) {}
+    void update(int v, int tl, int tr, int pos, ll val) {
+        if (tl == tr) t[v] = val;
+        else {
+            int tm = (tl + tr) / 2;
+            if (pos <= tm) update(v*2, tl, tm, pos, val);
+            else update(v*2+1, tm+1, tr, pos, val);
+            t[v] = t[v*2] + t[v*2+1];
+        }
+    }
+    ll query(int v, int tl, int tr, int l, int r) const {
+        if (l > r) return 0;
+        if (l == tl && r == tr) return t[v];
+        int tm = (tl + tr) / 2;
+        return query(v*2, tl, tm, l, min(r, tm))
+             + query(v*2+1, tm+1, tr, max(l, tm+1), r);
+    }
+};
+
+/* =========================
+   Sparse Table (RMQ)
+   ========================= */
+struct SparseTable {
+    int n, LOG;
+    vector<vector<ll>> st;
+
+    explicit SparseTable(const vector<ll>& a) {
+        n = (int)a.size();
+        LOG = bit_width((unsigned)n);
+        st.assign(LOG, vector<ll>(n));
+        st[0] = a;
+        for (int k = 1; k < LOG; k++)
+            for (int i = 0; i + (1<<k) <= n; i++)
+                st[k][i] = min(st[k-1][i], st[k-1][i + (1<<(k-1))]);
+    }
+    ll query(int l, int r) const {
+        int k = bit_width((unsigned)(r - l + 1)) - 1;
+        return min(st[k][l], st[k][r - (1<<k) + 1]);
+    }
+};
+
+/* =========================
+   Trie (lowercase)
+   ========================= */
+struct Trie {
+    struct Node {
+        array<int,26> nxt{};
+        bool end = false;
+        Node() { nxt.fill(-1); }
+    };
+    vector<Node> t{Node()};
+    void insert(const string& s) {
+        int v = 0;
+        for (char c : s) {
+            int x = c - 'a';
+            if (t[v].nxt[x] == -1) { t[v].nxt[x] = (int)t.size(); t.emplace_back(); }
+            v = t[v].nxt[x];
+        }
+        t[v].end = true;
+    }
+};
+
+/* =========================
+   Graph helpers
+   ========================= */
+struct Edge { int to; ll w; };
+using Graph = vector<vector<Edge>>;
+
+/* =========================
+   Geometry
+   ========================= */
+struct Point { ll x, y; };
+constexpr ll cross(const Point& a, const Point& b) { return a.x * b.y - a.y * b.x; }
+
+void trim(std::string& s) {
+    s.erase(s.begin(), std::find_if_not(s.begin(), s.end(), [](unsigned char c){ return isspace(c); }));
+    s.erase(std::find_if_not(s.rbegin(), s.rend(), [](unsigned char c){ return isspace(c); }).base(), s.end());
+}
+
+/* =========================
+   Problem solver
+   ========================= */
+void solve() {
+    int n;
+    ll m;
+    cin >> n >> m;
+
+    vector<array<int,26>> cnt(n);
+    array<ll,26> total{};
+    total.fill(0);
+
+    for (int i = 0; i < n; i++) {
+        string s;
+        cin >> s;
+        cnt[i].fill(0);
+        for (char ch : s) {
+            int id = ch - 'A';
+            cnt[i][id]++;
+            total[id]++;
+        }
+    }
+
+    vector<ll> ans(n, -1);
+
+    for (int i = 0; i < n; i++) {
+        ll best_k = INFLL;
+        bool ok = true;
+
+        for (int c = 0; c < 26; c++) {
+            ll x = cnt[i][c];
+            ll B = total[c] - x;
+
+            if (B == 0) {
+                if (x > 0) { ok = false; break; }
+                continue;
+            }
+
+            ll avail = m * B;
+            if (avail < x) { ok = false; break; }
+            ll bound = (avail - x) / B;
+            best_k = min(best_k, bound);
+        }
+
+        if (!ok) ans[i] = -1;
+        else {
+            if (best_k == INFLL) best_k = 0;
+            ans[i] = best_k;
+        }
+    }
+
+    for (int i = 0; i < n; i++) {
+        if (i) cout << ' ';
+        cout << ans[i];
+    }
+    cout << '\n';
+}
+
+/* =========================
+   Entry Point
+   ========================= */
+int main() {
+    FAST_IO;
+    solve();
+    return 0;
+}
+
+Solution for B - Battle of Arrays
+
+#include <bits/stdc++.h>
+using namespace std;
+
+/* =========================
+   Type aliases
+   ========================= */
+using ll  = long long;
+using ull = unsigned long long;
+
+#define FAST_IO ios::sync_with_stdio(false); cin.tie(nullptr);
+
+/* =========================
+   Problem solver
+   ========================= */
+void solve() {
+    int n, m;
+    cin >> n >> m;
+
+    priority_queue<ll> A, B;
+
+    for (int i = 0; i < n; i++) {
+        ll x; cin >> x;
+        A.push(x);
+    }
+    for (int j = 0; j < m; j++) {
+        ll x; cin >> x;
+        B.push(x);
+    }
+
+    bool alice_turn = true;
+
+    while (!A.empty() && !B.empty()) {
+        if (alice_turn) {
+            ll x = A.top();
+            ll y = B.top(); B.pop();
+
+            if (y <= x) {
+                if (B.empty()) { cout << "Alice\n"; return; }
+            } else {
+                y -= x;
+                B.push(y);
+            }
+        } else {
+            ll x = B.top();
+            ll y = A.top(); A.pop();
+
+            if (y <= x) {
+                if (A.empty()) { cout << "Bob\n"; return; }
+            } else {
+                y -= x;
+                A.push(y);
+            }
+        }
+        alice_turn = !alice_turn;
+    }
+
+    cout << (A.empty() ? "Bob\n" : "Alice\n");
+}
+
+/* =========================
+   Entry Point
+   ========================= */
+int main() {
+    FAST_IO;
+
+    int T;
+    cin >> T;
+    while (T--) solve();
+
+    return 0;
+}
+
+Solution for D - Doorway
+
+#include <bits/stdc++.h>
+using namespace std;
+
+using ll = long long;
+#define FAST_IO ios::sync_with_stdio(false); cin.tie(nullptr);
+
+int main() {
+    FAST_IO;
+
+    int n;
+    cin >> n;
+
+    vector<ll> x1(n), x2(n);
+    vector<vector<ll>> doors(n);
+
+    for (int i = 0; i < n; i++) {
+        int k;
+        cin >> k >> x1[i] >> x2[i];
+        doors[i].resize(k);
+        for (int j = 0; j < k; j++) cin >> doors[i][j];
+    }
+
+    auto can = [&](ll W) {
+        vector<pair<ll,ll>> cur;
+        cur.emplace_back(LLONG_MIN, LLONG_MAX);
+
+        for (int i = 0; i < n; i++) {
+            ll S = 0;
+            for (ll d : doors[i]) S += d;
+            ll F = (x2[i] - x1[i]) - S;
+            if (F < W) return false;
+
+            vector<pair<ll,ll>> layer;
+            ll pref = 0;
+
+            layer.emplace_back(
+                x1[i],
+                x1[i] + (F - W)
+            );
+
+            for (ll d : doors[i]) {
+                pref += d;
+                layer.emplace_back(
+                    x1[i] + pref,
+                    x1[i] + pref + (F - W)
+                );
+            }
+
+            vector<pair<ll,ll>> next;
+            for (auto &a : cur) {
+                for (auto &b : layer) {
+                    ll L = max(a.first, b.first);
+                    ll R = min(a.second, b.second);
+                    if (L <= R)
+                        next.emplace_back(L, R);
+                }
+            }
+
+            if (next.empty()) return false;
+            cur.swap(next);
+        }
+        return true;
+    };
+
+    ll lo = 0, hi = 1e18, ans = 0;
+    while (lo <= hi) {
+        ll mid = (lo + hi) / 2;
+        if (can(mid)) {
+            ans = mid;
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
+    }
+
+    cout << ans << "\n";
+    return 0;
+}
+
+Solution for F - Fragmented Nim
+
+#include <bits/stdc++.h>
+using namespace std;
+
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int T;
+    cin >> T;
+    while (T--) {
+        int n;
+        cin >> n;
+        long long c1 = 0;
+        bool doesItContainBig = false;
+
+        for (int i = 0; i < n; i++) {
+            long long x; cin >> x;
+            if (x == 1) c1++;
+            else doesItContainBig = true;
+        }
+
+        if (!doesItContainBig) {
+            if (n%2==1) cout << "Alice\n";
+            else cout << "Bob\n";
+        } else {
+            if (c1%2==0) cout << "Alice\n";
+            else cout << "Bob\n";
+        }
+    }
+
+    return 0;
+}
+
+G - Greta's Game
+
+#include <bits/stdc++.h>
+using namespace std;
+
+using ll = long long;
+
+static ll ceil_div(ll a, ll b) {
+    return (a + b - 1) / b;
+}
+
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int T;
+    cin >> T;
+    while (T--) {
+        int n;
+        cin >> n;
+        vector<ll> a(n + 1);
+        for (int i = 1; i <= n; i++) cin >> a[i];
+
+        vector<int> temp(n + 1, 0);
+        vector<ll> c(n + 1, 0);
+
+        temp[1] = +1;
+        c[1] = 0;
+
+        for (int i = 2; i <= n; i++) {
+            temp[i] = -temp[i - 1];
+            c[i] = a[i] - c[i - 1];
+        }
+
+        ll b1 = 0;
+
+        if (n % 2 == 1) {
+            b1 = (a[1] - c[n]) / 2;
+        } else {
+            ll L = LLONG_MIN / 4;
+            ll U = LLONG_MAX / 4;
+
+            for (int i = 1; i <= n; i++) {
+                if (temp[i] == +1) {
+                    L = max(L, -c[i]);
+                } else {
+                    U = min(U, c[i]);
+                }
+            }
+
+            ll Cp = LLONG_MIN / 4, Cn = LLONG_MIN / 4;
+            for (int i = 1; i <= n; i++) {
+                if (temp[i] == +1) Cp = max(Cp, c[i]);
+                else Cn = max(Cn, c[i]);
+            }
+
+            ll mid = (Cn - Cp) / 2;
+
+            vector<ll> vectcan = {L, U, mid, mid + 1, mid - 1};
+            ll bestMax = (ll)4e18;
+            ll bestB1 = L;
+
+            for (ll x : vectcan) {
+                if (x < L || x > U) continue;
+                ll mx = max(x + Cp, -x + Cn);
+                if (mx < bestMax) {
+                    bestMax = mx;
+                    bestB1 = x;
+                }
+            }
+            b1 = bestB1;
+        }
+
+        vector<ll> b(n + 1, 0);
+        ll mxB = 0;
+        ll sumB = 0;
+        for (int i = 1; i <= n; i++) {
+            b[i] = (ll)temp[i] * b1 + c[i];
+            mxB = max(mxB, b[i]);
+            sumB += b[i];
+        }
+
+        ll R = max(mxB, ceil_div(sumB, (ll)(n - 1)));
+        cout << R << "\n";
+    }
+
+    return 0;
+}
+
+Solution for H - Honey Cake
+
+#include <bits/stdc++.h>
+using namespace std;
+using ll = long long;
+
+vector<ll> divisors(ll x) {
+    vector<ll> d;
+    for (ll i = 1; i * i <= x; i++) {
+        if (x % i == 0) {
+            d.push_back(i);
+            if (i * i != x) d.push_back(x / i);
+        }
+    }
+    return d;
+}
+
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    ll w, h, d, n;
+    cin >> w >> h >> d >> n;
+
+    auto dw = divisors(w);
+    auto dh = divisors(h);
+
+    ll best_max = LLONG_MAX;
+    ll best_w = -1, best_h = -1, best_d = -1;
+
+    for (ll kw : dw) {
+        if (n % kw != 0) continue;
+        ll rem = n / kw;
+
+        for (ll kh : dh) {
+            if (rem % kh != 0) continue;
+            ll kd = rem / kh;
+
+            if (kd >= 1 && d % kd == 0) {
+                ll cur_max = max({kw, kh, kd});
+                if (cur_max < best_max) {
+                    best_max = cur_max;
+                    best_w = kw;
+                    best_h = kh;
+                    best_d = kd;
+                }
+            }
+        }
+    }
+
+    if (best_w == -1) {
+        cout << -1 << "\n";
+    } else {
+        cout << best_w - 1 << " "
+             << best_h - 1 << " "
+             << best_d - 1 << "\n";
+    }
+
+    return 0;
+}
+
+
+ Solution for M - Medical Parity
+
+ #include <bits/stdc++.h>
+ using namespace std;
+
+ static const int full = 1e9;
+
+ int main() {
+     ios::sync_with_stdio(false);
+     cin.tie(nullptr);
+
+     int T; cin >> T;
+     while (T--) {
+         string x, y;
+         cin>>x>>y;
+         int n=x.size();
+         int dp0 = 0, dp1 = full;
+         for (int i = 0; i < n; i++) {
+             int nx0 = full, nx1 = full;
+
+             for (int p = 0; p <= 1; p++) {
+                 int cur = (p == 0 ? dp0 : dp1);
+                 if (cur >= full) continue;
+                 for (int fx = 0; fx <= 1; fx++) {
+                     int bit = (x[i] - '0') ^ fx;
+                     int np = p ^ bit;
+
+                     int nd = y[i] - '0';
+                     int fy = (np != nd);
+
+                     int cost = cur + fx + fy;
+                     if (np == 0) nx0 = min(nx0, cost);
+                     else nx1 = min(nx1, cost);
+                 }
+             }
+
+             dp0 = nx0;
+             dp1 = nx1;
+         }
+
+         cout << min(dp0, dp1) << "\n";
+     }
+     return 0;
+ }
+
+ Solution of J - Jinx or Jackpot
+
+ #include <bits/stdc++.h>
+ using namespace std;
+
+ int main() {
+     ios::sync_with_stdio(false);
+     cin.tie(nullptr);
+
+     int n, k;
+     cin >> n >> k;
+
+     array<long double, 101> cnt{};
+     for (int i = 0; i < n; i++) {
+         int p; cin >> p;
+         cnt[p] += 1.0L;
+     }
+
+     vector<vector<long double>> mu(k + 1);
+     for (int t = 0; t <= k; t++) {
+         mu[t].assign(t + 1, 0.0L);
+         for (int w = 0; w <= t; w++) {
+             long double num = 0.0L, den = 0.0L;
+             for (int p = 0; p <= 100; p++) if (cnt[p] > 0) {
+                 long double q = (long double)p / 100.0L;
+                 long double wt =
+                     cnt[p] *
+                     pow(q, (long double)w) *
+                     pow(1.0L - q, (long double)(t - w));
+                 den += wt;
+                 num += wt * q;
+             }
+             mu[t][w] = (den == 0.0L ? 0.0L : num / den);
+         }
+     }
+
+     vector<vector<long double>> V(k + 1);
+     for (int t = 0; t <= k; t++) V[t].assign(t + 1, 0.0L);
+
+     for (int w = 0; w <= k; w++) V[k][w] = 1.0L;
+
+     for (int t = k - 1; t >= 0; t--) {
+         for (int w = 0; w <= t; w++) {
+             long double pwin = mu[t][w];
+             long double g_win  = V[t + 1][w + 1];
+             long double g_loss = V[t + 1][w];
+
+             long double bet0   = pwin * g_win + (1.0L - pwin) * g_loss;
+             long double allin  = 2.0L * pwin * g_win;
+
+             V[t][w] = max(bet0, allin);
+         }
+     }
+
+     long double ans = 1000.0L * (V[0][0] - 1.0L);
+     cout << fixed << setprecision(12) << (double)ans << "\n";
+     return 0;
+ }
+
+
+Solution of L - LLM Training
+
+#include <bits/stdc++.h>
+using namespace std;
+
+using ll = long long;
+using ull = unsigned long long;
+
+static inline long double lg2l_safe(long double x) {
+    return log2l(x);
+}
+static inline ull splitmix64(ull x) {
+    x += 0x9e3779b97f4a7c15ULL;
+    x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+    return x ^ (x >> 31);
+}
+
+struct SAM {
+    struct State {
+        int link = -1;
+        int len = 0;
+        unordered_map<int,int> next;
+    };
+
+    vector<State> st;
+    int last;
+
+    SAM(int reserve_states = 0) {
+        st.reserve(max(2, reserve_states));
+        st.push_back(State());
+        last = 0;
+    }
+
+    int extend(int c) {
+        int cur = (int)st.size();
+        st.push_back(State());
+        st[cur].len = st[last].len + 1;
+
+        int p = last;
+        while (p != -1 && !st[p].next.count(c)) {
+            st[p].next[c] = cur;
+            p = st[p].link;
+        }
+        if (p == -1) {
+            st[cur].link = 0;
+        } else {
+            int q = st[p].next[c];
+            if (st[p].len + 1 == st[q].len) {
+                st[cur].link = q;
+            } else {
+                int clone = (int)st.size();
+                st.push_back(st[q]);
+                st[clone].len = st[p].len + 1;
+                while (p != -1 && st[p].next[c] == q) {
+                    st[p].next[c] = clone;
+                    p = st[p].link;
+                }
+                st[q].link = st[cur].link = clone;
+            }
+        }
+        last = cur;
+        return cur;
+    }
+};
+
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int n;
+    cin >> n;
+
+    vector<int> m(n);
+    vector<vector<string>> toks_str(n);
+    vector<string> mask(n);
+    int M = 0;
+
+    for (int i = 0; i < n; i++) {
+        cin >> m[i];
+        M = max(M, m[i]);
+        toks_str[i].resize(m[i]);
+        for (int j = 0; j < m[i]; j++) cin >> toks_str[i][j];
+        cin >> mask[i];
+    }
+
+    unordered_map<string,int> id;
+    id.reserve(2 * M + 10);
+    int next_id = 1;
+
+    vector<vector<int>> toks(n);
+    for (int i = 0; i < n; i++) {
+        toks[i].resize(m[i]);
+        for (int j = 0; j < m[i]; j++) {
+            if (!id.count(toks_str[i][j]))
+                id[toks_str[i][j]] = next_id++;
+            toks[i][j] = id[toks_str[i][j]];
+        }
+    }
+
+    SAM sam(800000);
+
+    vector<pair<int,int>> raw_events;
+    raw_events.reserve(300000);
+
+    unordered_map<int,ll> allL_cnt;
+    ll totalL = 0;
+
+    struct PrefOcc { int l; ull h; int nxt; };
+    vector<PrefOcc> prefOcc;
+    prefOcc.reserve(300000);
+
+    const ull HASH_BASE = splitmix64(123456789ULL);
+    int sep_base = next_id + 5;
+
+    vector<int> posState;
+    posState.reserve(400000);
+    int concat_pos = -1;
+
+    for (int i = 0; i < n; i++) {
+        sam.last = 0;
+        vector<ull> prefHash(m[i] + 1, 0);
+
+        for (int j = 1; j <= m[i]; j++) {
+            ull x = (ull)toks[i][j-1];
+            prefHash[j] = splitmix64(prefHash[j-1] ^ (x + HASH_BASE));
+
+            int cur = sam.extend(toks[i][j-1]);
+            posState.push_back(cur);
+            concat_pos++;
+
+            if (mask[i][j-1] == 'L') {
+                int sym = toks[i][j-1];
+                allL_cnt[sym]++;
+                totalL++;
+
+                if (j > 1) {
+                    raw_events.push_back({posState[concat_pos - 1], sym});
+                }
+                prefOcc.push_back({j - 1, prefHash[j - 1], sym});
+            }
+        }
+        sam.extend(sep_base + i);
+        posState.push_back(sam.last);
+        concat_pos++;
+    }
+
+    int S = sam.st.size();
+    vector<vector<int>> children(S);
+    for (int v = 1; v < S; v++)
+        children[sam.st[v].link].push_back(v);
+
+    sort(raw_events.begin(), raw_events.end());
+    vector<vector<pair<int,int>>> own(S);
+
+    for (size_t i = 0; i < raw_events.size();) {
+        int v = raw_events[i].first;
+        size_t j = i;
+        while (j < raw_events.size() && raw_events[j].first == v) j++;
+        for (size_t k = i; k < j;) {
+            int tok = raw_events[k].second;
+            size_t kk = k;
+            while (kk < j && raw_events[kk].second == tok) kk++;
+            own[v].push_back({tok, (int)(kk - k)});
+            k = kk;
+        }
+        i = j;
+    }
+
+    vector<unordered_map<int,ll>*> mp(S, nullptr);
+    vector<ll> totCnt(S, 0);
+
+    vector<int> order, stk = {0}, it(S, 0);
+    while (!stk.empty()) {
+        int v = stk.back();
+        if (it[v] < (int)children[v].size())
+            stk.push_back(children[v][it[v]++]);
+        else {
+            order.push_back(v);
+            stk.pop_back();
+        }
+    }
+
+    vector<long double> diffA(M + 1, 0.0L);
+
+    for (int v : order) {
+        int big = -1;
+        for (int u : children[v])
+            if (mp[u] && (big == -1 || mp[u]->size() > mp[big]->size()))
+                big = u;
+
+        if (big == -1) mp[v] = new unordered_map<int,ll>();
+        else {
+            mp[v] = mp[big];
+            mp[big] = nullptr;
+        }
+
+        for (int u : children[v]) if (u != big && mp[u]) {
+            for (auto &kv : *mp[u]) (*mp[v])[kv.first] += kv.second;
+            delete mp[u];
+        }
+
+        for (auto &p : own[v]) (*mp[v])[p.first] += p.second;
+
+        ll sum = 0;
+        for (auto &kv : *mp[v]) sum += kv.second;
+        totCnt[v] = sum;
+
+        if (sum > 0) {
+            int L = sam.st[sam.st[v].link].len + 1;
+            int R = sam.st[v].len;
+            L = max(L, 1);
+            R = min(R, M - 1);
+            if (L <= R) {
+                long double T = sum;
+                long double val = T * lg2l_safe(T);
+                for (auto &kv : *mp[v])
+                    val -= kv.second * lg2l_safe(kv.second);
+                diffA[L] += val;
+                diffA[R + 1] -= val;
+            }
+        }
+    }
+
+    vector<long double> A(M, 0.0L);
+
+    if (totalL > 0) {
+        long double T = totalL;
+        long double val = T * lg2l_safe(T);
+        for (auto &kv : allL_cnt)
+            val -= kv.second * lg2l_safe(kv.second);
+        A[0] = val;
+    }
+
+    // k >= 1
+    long double run = 0.0L;
+    for (int k = 1; k < M; k++) {
+        run += diffA[k];
+        A[k] = run;
+    }
+
+    vector<long double> C(M, 0.0L);
+    sort(prefOcc.begin(), prefOcc.end(),
+         [](auto &a, auto &b){
+             if (a.l != b.l) return a.l < b.l;
+             if (a.h != b.h) return a.h < b.h;
+             return a.nxt < b.nxt;
+         });
+
+    for (size_t i = 0; i < prefOcc.size();) {
+        int l = prefOcc[i].l;
+        ull h = prefOcc[i].h;
+        long double tot = 0, sc = 0;
+        size_t j = i;
+        while (j < prefOcc.size() && prefOcc[j].l == l && prefOcc[j].h == h) {
+            size_t k = j;
+            while (k < prefOcc.size() &&
+                   prefOcc[k].l == l &&
+                   prefOcc[k].h == h &&
+                   prefOcc[k].nxt == prefOcc[j].nxt) k++;
+            long double c = (long double)(k - j);
+            tot += c;
+            sc += c * lg2l_safe(c);
+            j = k;
+        }
+        if (tot > 0) C[l] += tot * lg2l_safe(tot) - sc;
+        i = j;
+    }
+
+    vector<long double> prefC(M + 1, 0.0L);
+    for (int i = 0; i < M; i++) prefC[i + 1] = prefC[i] + C[i];
+
+    cout.setf(ios::fixed);
+    cout << setprecision(10);
+    for (int k = 0; k < M; k++)
+        cout << (double)(A[k] + prefC[k]) << "\n";
+
+    if (mp[0]) delete mp[0];
+    return 0;
+}
+
